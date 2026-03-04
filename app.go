@@ -16,7 +16,7 @@ func main() {
 
 	appInstance, alreadyRunning, err := newApp()
 	if err != nil {
-		showMessageBox(0, err.Error(), "VRC Minimal Mute Controller", 0x10)
+		showMessageBox(0, err.Error(), appName, 0x10)
 		return
 	}
 	if alreadyRunning {
@@ -27,7 +27,7 @@ func main() {
 	defer appInstance.cleanup()
 
 	if err := appInstance.run(); err != nil {
-		showMessageBox(0, err.Error(), "VRC Minimal Mute Controller", 0x10)
+		showMessageBox(0, err.Error(), appName, 0x10)
 	}
 }
 
@@ -56,6 +56,7 @@ func newApp() (*app, bool, error) {
 }
 
 func (a *app) run() error {
+	a.hIcon = loadTrayIcon()
 	if err := a.registerMainWindowClass(); err != nil {
 		return err
 	}
@@ -66,7 +67,6 @@ func (a *app) run() error {
 		return err
 	}
 
-	a.hIcon = loadTrayIcon()
 	if err := a.addTrayIcon(); err != nil {
 		return err
 	}
@@ -108,6 +108,8 @@ func (a *app) registerMainWindowClass() error {
 		CbSize:        uint32(unsafe.Sizeof(wndClassEx{})),
 		LpfnWndProc:   mainWndProcPtr,
 		HInstance:     a.hInstance,
+		HIcon:         a.hIcon,
+		HIconSm:       a.hIcon,
 		LpszClassName: toUTF16Ptr(windowClassName),
 	}
 
@@ -123,6 +125,8 @@ func (a *app) registerDialogWindowClass() error {
 		CbSize:        uint32(unsafe.Sizeof(wndClassEx{})),
 		LpfnWndProc:   dialogWndProcPtr,
 		HInstance:     a.hInstance,
+		HIcon:         a.hIcon,
+		HIconSm:       a.hIcon,
 		LpszClassName: toUTF16Ptr(dialogClassName),
 	}
 
@@ -165,7 +169,7 @@ func (a *app) addTrayIcon() error {
 		UCallbackMessage:  wmTrayIcon,
 		HIcon:             a.hIcon,
 	}
-	copy(data.SzTip[:], syscall.StringToUTF16("VRC Minimal Mute Controller"))
+	copy(data.SzTip[:], syscall.StringToUTF16(appName))
 
 	r1, _, err := procShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&data)))
 	if r1 == 0 {
@@ -302,13 +306,13 @@ func (a *app) showContextMenu() {
 func (a *app) toggleStartup() {
 	if isStartupEnabled() {
 		if err := disableStartup(); err != nil {
-			showMessageBox(a.hwnd, "スタートアップ設定を無効化できませんでした。", "VRC Minimal Mute Controller", 0x10)
+			showMessageBox(a.hwnd, "スタートアップ設定を無効化できませんでした。", appName, 0x10)
 		}
 		return
 	}
 
 	if err := enableStartup(); err != nil {
-		showMessageBox(a.hwnd, "スタートアップ設定を有効化できませんでした。", "VRC Minimal Mute Controller", 0x10)
+		showMessageBox(a.hwnd, "スタートアップ設定を有効化できませんでした。", appName, 0x10)
 	}
 }
 

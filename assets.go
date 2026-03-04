@@ -6,5 +6,5 @@ import _ "embed"
 
 // トレイアイコンは実行ファイルに埋め込んで、単体配布できるようにする。
 //
-//go:embed MuteIcon.ico
+//go:embed Icon.ico
 var embeddedTrayIcon []byte
