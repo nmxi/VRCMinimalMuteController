@@ -13,6 +13,15 @@ type shortcutKeyOption struct {
 	label string
 }
 
+type shortcutValidationResult int
+
+const (
+	shortcutValid shortcutValidationResult = iota
+	shortcutMissingKey
+	shortcutNeedsModifier
+	shortcutDisallowedKey
+)
+
 var shortcutKeyOptions = buildShortcutKeyOptions()
 
 func (a *app) loadConfiguredShortcut() {
@@ -168,8 +177,15 @@ func (d *shortcutDialog) readModifierMask() uint32 {
 }
 
 func (d *shortcutDialog) save() {
-	if !isValidShortcut(d.selectedShortcut) {
-		showMessageBox(d.hwnd, "登録するキーを入力してください。修飾キーのみでは登録できません。", "ショートカット設定", 0x40)
+	switch validateShortcut(d.selectedShortcut) {
+	case shortcutMissingKey:
+		showMessageBox(d.hwnd, "修飾キーのみでは登録できません。", "ショートカット設定", 0x40)
+		return
+	case shortcutNeedsModifier:
+		showMessageBox(d.hwnd, "選択されたキーは単独で登録することができません。修飾キーを含めて登録する必要があります。", "ショートカット設定", 0x40)
+		return
+	case shortcutDisallowedKey:
+		showMessageBox(d.hwnd, "LWin と RWin は登録できません。", "ショートカット設定", 0x40)
 		return
 	}
 	if currentApp == nil {
@@ -184,6 +200,7 @@ func (d *shortcutDialog) save() {
 	currentText := "現在の設定値: " + formatShortcut(currentApp.configuredShortcut)
 	procSetWindowTextW.Call(d.currentLabel, uintptr(unsafe.Pointer(toUTF16Ptr(currentText))))
 	showMessageBox(d.hwnd, "ショートカットを "+formatShortcut(currentApp.configuredShortcut)+" に設定しました。", "ショートカット設定", 0x40)
+	procDestroyWindow.Call(d.hwnd)
 }
 
 func (d *shortcutDialog) remove() {
@@ -273,7 +290,37 @@ func (a *app) tryRegisterShortcut(shortcut uint32) bool {
 }
 
 func isValidShortcut(shortcut uint32) bool {
-	return shortcut&0xFFFF != 0
+	return validateShortcut(shortcut) == shortcutValid
+}
+
+func validateShortcut(shortcut uint32) shortcutValidationResult {
+	keyCode := shortcut & 0xFFFF
+	if keyCode == 0 {
+		return shortcutMissingKey
+	}
+
+	if keyCode == vkLWin || keyCode == vkRWin {
+		return shortcutDisallowedKey
+	}
+
+	if shortcut&(shortcutControlMask|shortcutShiftMask|shortcutAltMask) != 0 {
+		return shortcutValid
+	}
+
+	if isSingleKeyAllowed(keyCode) {
+		return shortcutValid
+	}
+
+	return shortcutNeedsModifier
+}
+
+func isSingleKeyAllowed(keyCode uint32) bool {
+	switch keyCode {
+	case vkCancel, vkPause, vkHome, vkEnd, vkPrior, vkNext, vkInsert, vkDelete:
+		return true
+	}
+
+	return keyCode >= 0x70 && keyCode <= 0x87
 }
 
 func currentModifierMask() uint32 {
@@ -346,8 +393,6 @@ func buildShortcutKeyOptions() []shortcutKeyOption {
 		vkBack,
 		vkSpace,
 		vkCapital,
-		vkLWin,
-		vkRWin,
 		vkApps,
 		vkNumpad0,
 		vkNumpad1,
