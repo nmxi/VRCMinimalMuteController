@@ -255,7 +255,19 @@ func dialogWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr
 		currentDialog.handleKey(uint32(wParam))
 		return 0
 	case wmCommand:
-		switch lowWord(uint32(wParam)) {
+		commandID := lowWord(uint32(wParam))
+		notifyCode := highWord(uint32(wParam))
+		if commandID == dialogKeyComboID && notifyCode == cbnSelChange {
+			currentDialog.handleComboSelection()
+			return 0
+		}
+		switch commandID {
+		case dialogCtrlCheckID, dialogShiftCheckID, dialogAltCheckID:
+			currentDialog.handleModifierChange()
+			return 0
+		}
+
+		switch commandID {
 		case dialogSaveButtonID:
 			currentDialog.save()
 			return 0

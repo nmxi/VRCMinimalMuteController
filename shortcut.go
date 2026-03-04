@@ -8,6 +8,13 @@ import (
 	"unsafe"
 )
 
+type shortcutKeyOption struct {
+	vk    uint32
+	label string
+}
+
+var shortcutKeyOptions = buildShortcutKeyOptions()
+
 func (a *app) loadConfiguredShortcut() {
 	shortcut, err := readShortcutSetting()
 	if err != nil {
@@ -39,7 +46,7 @@ func (a *app) showShortcutDialog() {
 		cwUseDefault,
 		cwUseDefault,
 		360,
-		200,
+		292,
 		0,
 		0,
 		a.hInstance,
@@ -62,37 +69,102 @@ func (a *app) showShortcutDialog() {
 }
 
 func (d *shortcutDialog) buildControls(configured uint32) {
-	createStatic(d.hwnd, "キーを入力してください。", 16, 16, 300, 20)
-	d.currentLabel = createStatic(d.hwnd, "現在の設定値: "+formatShortcut(configured), 16, 44, 320, 20)
-	d.selectedLabel = createStatic(d.hwnd, "入力値: "+formatShortcut(d.selectedShortcut), 16, 74, 320, 24)
-
-	createButton(d.hwnd, "登録", dialogSaveButtonID, 16, 118, 90, 28)
-	if configured != 0 {
-		createButton(d.hwnd, "削除", dialogDeleteButtonID, 116, 118, 90, 28)
+	d.currentLabel = createStatic(d.hwnd, "現在の設定値: "+formatShortcut(configured), 16, 16, 320, 20)
+	createStatic(d.hwnd, "キーを入力、または選択してください。", 16, 64, 320, 20)
+	createStatic(d.hwnd, "修飾キー:", 16, 94, 76, 20)
+	d.ctrlCheck = createCheckBox(d.hwnd, "Ctrl", dialogCtrlCheckID, 96, 92, 120, 20)
+	d.shiftCheck = createCheckBox(d.hwnd, "Shift", dialogShiftCheckID, 96, 116, 120, 20)
+	d.altCheck = createCheckBox(d.hwnd, "Alt", dialogAltCheckID, 96, 140, 120, 20)
+	createStatic(d.hwnd, "入力キー:", 16, 173, 76, 20)
+	d.keyCombo = createComboBox(d.hwnd, dialogKeyComboID, 96, 170, 228, 320)
+	for _, option := range shortcutKeyOptions {
+		sendMessage(d.keyCombo, cbAddString, 0, uintptr(unsafe.Pointer(toUTF16Ptr(option.label))))
 	}
-	createButton(d.hwnd, "キャンセル", dialogCancelButtonID, 214, 118, 110, 28)
+
+	d.syncModifierChecks()
+	d.syncKeyCombo()
+
+	createButton(d.hwnd, "登録", dialogSaveButtonID, 16, 204, 90, 28)
+	if configured != 0 {
+		createButton(d.hwnd, "削除", dialogDeleteButtonID, 116, 204, 90, 28)
+	}
+	createButton(d.hwnd, "キャンセル", dialogCancelButtonID, 214, 204, 110, 28)
 }
 
 func (d *shortcutDialog) handleKey(vk uint32) {
 	mods := currentModifierMask()
 	switch vk {
 	case vkControl, vkShift, vkMenu:
-		d.selectedShortcut = mods
+		d.selectedShortcut = mods | (d.selectedShortcut & 0xFFFF)
 	default:
 		d.selectedShortcut = mods | (vk & 0xFFFF)
 	}
 	d.refreshSelection()
 }
 
-func (d *shortcutDialog) refreshSelection() {
-	if d.selectedLabel == 0 {
+func (d *shortcutDialog) handleComboSelection() {
+	if d.keyCombo == 0 {
 		return
 	}
 
-	procSetWindowTextW.Call(
-		d.selectedLabel,
-		uintptr(unsafe.Pointer(toUTF16Ptr("入力値: "+formatShortcut(d.selectedShortcut)))),
-	)
+	index := int(sendMessage(d.keyCombo, cbGetCurSel, 0, 0))
+	if index < 0 || index >= len(shortcutKeyOptions) {
+		return
+	}
+
+	mods := d.selectedShortcut &^ 0xFFFF
+	d.selectedShortcut = mods | shortcutKeyOptions[index].vk
+	d.refreshSelection()
+	procSetFocus.Call(d.hwnd)
+}
+
+func (d *shortcutDialog) handleModifierChange() {
+	d.selectedShortcut = d.readModifierMask() | (d.selectedShortcut & 0xFFFF)
+	d.refreshSelection()
+}
+
+func (d *shortcutDialog) refreshSelection() {
+	d.syncModifierChecks()
+	d.syncKeyCombo()
+}
+
+func (d *shortcutDialog) syncModifierChecks() {
+	if d.ctrlCheck != 0 {
+		setCheckBoxState(d.ctrlCheck, d.selectedShortcut&shortcutControlMask != 0)
+	}
+	if d.shiftCheck != 0 {
+		setCheckBoxState(d.shiftCheck, d.selectedShortcut&shortcutShiftMask != 0)
+	}
+	if d.altCheck != 0 {
+		setCheckBoxState(d.altCheck, d.selectedShortcut&shortcutAltMask != 0)
+	}
+}
+
+func (d *shortcutDialog) syncKeyCombo() {
+	if d.keyCombo == 0 {
+		return
+	}
+
+	index := shortcutKeyIndex(d.selectedShortcut & 0xFFFF)
+	if index >= 0 {
+		sendMessage(d.keyCombo, cbSetCurSel, uintptr(index), 0)
+		return
+	}
+	sendMessage(d.keyCombo, cbSetCurSel, ^uintptr(0), 0)
+}
+
+func (d *shortcutDialog) readModifierMask() uint32 {
+	mask := uint32(0)
+	if checkBoxChecked(d.ctrlCheck) {
+		mask |= shortcutControlMask
+	}
+	if checkBoxChecked(d.shiftCheck) {
+		mask |= shortcutShiftMask
+	}
+	if checkBoxChecked(d.altCheck) {
+		mask |= shortcutAltMask
+	}
+	return mask
 }
 
 func (d *shortcutDialog) save() {
@@ -111,7 +183,7 @@ func (d *shortcutDialog) save() {
 
 	currentText := "現在の設定値: " + formatShortcut(currentApp.configuredShortcut)
 	procSetWindowTextW.Call(d.currentLabel, uintptr(unsafe.Pointer(toUTF16Ptr(currentText))))
-	procDestroyWindow.Call(d.hwnd)
+	showMessageBox(d.hwnd, "ショートカットを "+formatShortcut(currentApp.configuredShortcut)+" に設定しました。", "ショートカット設定", 0x40)
 }
 
 func (d *shortcutDialog) remove() {
@@ -140,7 +212,7 @@ func (a *app) saveShortcut(shortcut uint32) error {
 		if previousRegistered && previous != 0 {
 			a.hotKeyRegistered = a.tryRegisterShortcut(previous)
 		}
-		return fmt.Errorf("ショートカットを登録できませんでした。他のアプリで使用中の可能性があります。")
+		return fmt.Errorf("RegisterHotKey に失敗しました。他のアプリで使用中の可能性があります。")
 	}
 
 	a.configuredShortcut = shortcut
@@ -223,21 +295,101 @@ func keyDown(vk uint32) bool {
 	return uint16(state)&0x8000 != 0
 }
 
+func checkBoxChecked(hwnd uintptr) bool {
+	if hwnd == 0 {
+		return false
+	}
+	return sendMessage(hwnd, bmGetCheck, 0, 0) == bstChecked
+}
+
+func setCheckBoxState(hwnd uintptr, checked bool) {
+	if hwnd == 0 {
+		return
+	}
+	state := uintptr(bstUnchecked)
+	if checked {
+		state = bstChecked
+	}
+	sendMessage(hwnd, bmSetCheck, state, 0)
+}
+
+func buildShortcutKeyOptions() []shortcutKeyOption {
+	options := make([]shortcutKeyOption, 0, 64)
+
+	for vk := uint32('A'); vk <= 'Z'; vk++ {
+		options = append(options, shortcutKeyOption{vk: vk, label: string(rune(vk))})
+	}
+	for vk := uint32('0'); vk <= '9'; vk++ {
+		options = append(options, shortcutKeyOption{vk: vk, label: string(rune(vk))})
+	}
+	for vk := uint32(0x70); vk <= 0x87; vk++ {
+		options = append(options, shortcutKeyOption{vk: vk, label: fmt.Sprintf("F%d", vk-0x6F)})
+	}
+
+	extraKeys := []uint32{
+		vkCancel,
+		vkPause,
+		vkSnapshot,
+		vkLeft,
+		vkUp,
+		vkRight,
+		vkDown,
+		vkInsert,
+		vkDelete,
+		vkHome,
+		vkEnd,
+		vkPrior,
+		vkNext,
+		vkReturn,
+		vkEscape,
+		vkTab,
+		vkBack,
+		vkSpace,
+		vkCapital,
+		vkLWin,
+		vkRWin,
+		vkApps,
+		vkNumpad0,
+		vkNumpad1,
+		vkNumpad2,
+		vkNumpad3,
+		vkNumpad4,
+		vkNumpad5,
+		vkNumpad6,
+		vkNumpad7,
+		vkNumpad8,
+		vkNumpad9,
+		vkMultiply,
+		vkAdd,
+		vkSeparator,
+		vkSubtract,
+		vkDecimal,
+		vkDivide,
+		vkNumLock,
+		vkScroll,
+	}
+	for _, vk := range extraKeys {
+		options = append(options, shortcutKeyOption{vk: vk, label: keyName(vk)})
+	}
+
+	return options
+}
+
+func shortcutKeyIndex(vk uint32) int {
+	for i, option := range shortcutKeyOptions {
+		if option.vk == vk {
+			return i
+		}
+	}
+	return -1
+}
+
 func formatShortcut(shortcut uint32) string {
 	if shortcut == 0 {
 		return "未設定"
 	}
 
-	parts := make([]string, 0, 4)
-	if shortcut&shortcutControlMask != 0 {
-		parts = append(parts, "Ctrl")
-	}
-	if shortcut&shortcutShiftMask != 0 {
-		parts = append(parts, "Shift")
-	}
-	if shortcut&shortcutAltMask != 0 {
-		parts = append(parts, "Alt")
-	}
+	parts := formatModifierParts(shortcut)
 
 	keyCode := shortcut & 0xFFFF
 	if keyCode != 0 {
@@ -248,6 +400,20 @@ func formatShortcut(shortcut uint32) string {
 	}
 
 	return strings.Join(parts, "+")
+}
+
+func formatModifierParts(shortcut uint32) []string {
+	parts := make([]string, 0, 3)
+	if shortcut&shortcutControlMask != 0 {
+		parts = append(parts, "Ctrl")
+	}
+	if shortcut&shortcutShiftMask != 0 {
+		parts = append(parts, "Shift")
+	}
+	if shortcut&shortcutAltMask != 0 {
+		parts = append(parts, "Alt")
+	}
+	return parts
 }
 
 func keyName(vk uint32) string {
@@ -261,83 +427,85 @@ func keyName(vk uint32) string {
 	}
 
 	switch vk {
-	case 0x08:
+	case vkCancel:
+		return "Break"
+	case vkBack:
 		return "Backspace"
-	case 0x13:
+	case vkPause:
 		return "Pause"
-	case 0x14:
+	case vkCapital:
 		return "CapsLock"
-	case 0x20:
+	case vkSpace:
 		return "Space"
-	case 0x2C:
+	case vkSnapshot:
 		return "PrintScreen"
-	case 0x25:
+	case vkLeft:
 		return "Left"
-	case 0x26:
+	case vkUp:
 		return "Up"
-	case 0x27:
+	case vkRight:
 		return "Right"
-	case 0x28:
+	case vkDown:
 		return "Down"
-	case 0x2D:
+	case vkInsert:
 		return "Insert"
-	case 0x2E:
+	case vkDelete:
 		return "Delete"
-	case 0x5B:
+	case vkLWin:
 		return "LWin"
-	case 0x5C:
+	case vkRWin:
 		return "RWin"
-	case 0x5D:
+	case vkApps:
 		return "Apps"
-	case 0x60:
+	case vkNumpad0:
 		return "NumPad0"
-	case 0x61:
+	case vkNumpad1:
 		return "NumPad1"
-	case 0x62:
+	case vkNumpad2:
 		return "NumPad2"
-	case 0x63:
+	case vkNumpad3:
 		return "NumPad3"
-	case 0x64:
+	case vkNumpad4:
 		return "NumPad4"
-	case 0x65:
+	case vkNumpad5:
 		return "NumPad5"
-	case 0x66:
+	case vkNumpad6:
 		return "NumPad6"
-	case 0x67:
+	case vkNumpad7:
 		return "NumPad7"
-	case 0x68:
+	case vkNumpad8:
 		return "NumPad8"
-	case 0x69:
+	case vkNumpad9:
 		return "NumPad9"
-	case 0x6A:
+	case vkMultiply:
 		return "NumPad*"
-	case 0x6B:
+	case vkAdd:
 		return "NumPad+"
-	case 0x6C:
+	case vkSeparator:
 		return "Separator"
-	case 0x6D:
+	case vkSubtract:
 		return "NumPad-"
-	case 0x6E:
+	case vkDecimal:
 		return "NumPad."
-	case 0x6F:
+	case vkDivide:
 		return "NumPad/"
-	case 0x90:
+	case vkNumLock:
 		return "NumLock"
-	case 0x91:
+	case vkScroll:
 		return "ScrollLock"
-	case 0x24:
+	case vkHome:
 		return "Home"
-	case 0x23:
+	case vkEnd:
 		return "End"
-	case 0x21:
+	case vkPrior:
 		return "PageUp"
-	case 0x22:
+	case vkNext:
 		return "PageDown"
-	case 0x0D:
+	case vkReturn:
 		return "Enter"
-	case 0x1B:
+	case vkEscape:
 		return "Esc"
-	case 0x09:
+	case vkTab:
 		return "Tab"
 	}
 

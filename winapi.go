@@ -36,6 +36,7 @@ var (
 	procRegisterHotKey       = modUser32.NewProc("RegisterHotKey")
 	procUnregisterHotKey     = modUser32.NewProc("UnregisterHotKey")
 	procMessageBoxW          = modUser32.NewProc("MessageBoxW")
+	procSendMessageW         = modUser32.NewProc("SendMessageW")
 	procSetWindowTextW       = modUser32.NewProc("SetWindowTextW")
 	procShowWindow           = modUser32.NewProc("ShowWindow")
 	procUpdateWindow         = modUser32.NewProc("UpdateWindow")
@@ -58,6 +59,14 @@ func createStatic(parent uintptr, text string, x, y, width, height int32) uintpt
 
 func createButton(parent uintptr, text string, id uintptr, x, y, width, height int32) uintptr {
 	return createControl("BUTTON", text, bsPushButton|wsChild|wsVisible, 0, x, y, width, height, parent, id)
+}
+
+func createCheckBox(parent uintptr, text string, id uintptr, x, y, width, height int32) uintptr {
+	return createControl("BUTTON", text, bsAutoCheckBox|wsChild|wsVisible|wsTabStop, 0, x, y, width, height, parent, id)
+}
+
+func createComboBox(parent, id uintptr, x, y, width, height int32) uintptr {
+	return createControl("COMBOBOX", "", cbsDropdownList|wsChild|wsVisible|wsTabStop|wsVScroll, 0, x, y, width, height, parent, id)
 }
 
 func createControl(className, text string, style, exStyle uint32, x, y, width, height int32, parent, id uintptr) uintptr {
@@ -93,6 +102,15 @@ func defWindowProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr
 
 func lowWord(value uint32) uint32 {
 	return value & 0xFFFF
+}
+
+func highWord(value uint32) uint32 {
+	return value >> 16
+}
+
+func sendMessage(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
+	r1, _, _ := procSendMessageW.Call(hwnd, uintptr(message), wParam, lParam)
+	return r1
 }
 
 func toUTF16Ptr(value string) *uint16 {
