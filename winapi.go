@@ -19,6 +19,7 @@ var (
 	procCreateWindowExW      = modUser32.NewProc("CreateWindowExW")
 	procDefWindowProcW       = modUser32.NewProc("DefWindowProcW")
 	procDestroyWindow        = modUser32.NewProc("DestroyWindow")
+	procGetComboBoxInfo      = modUser32.NewProc("GetComboBoxInfo")
 	procGetMessageW          = modUser32.NewProc("GetMessageW")
 	procTranslateMessage     = modUser32.NewProc("TranslateMessage")
 	procDispatchMessageW     = modUser32.NewProc("DispatchMessageW")
@@ -36,6 +37,7 @@ var (
 	procRegisterHotKey       = modUser32.NewProc("RegisterHotKey")
 	procUnregisterHotKey     = modUser32.NewProc("UnregisterHotKey")
 	procMessageBoxW          = modUser32.NewProc("MessageBoxW")
+	procRedrawWindow         = modUser32.NewProc("RedrawWindow")
 	procSendMessageW         = modUser32.NewProc("SendMessageW")
 	procSetWindowTextW       = modUser32.NewProc("SetWindowTextW")
 	procShowWindow           = modUser32.NewProc("ShowWindow")
@@ -63,6 +65,10 @@ func createButton(parent uintptr, text string, id uintptr, x, y, width, height i
 
 func createCheckBox(parent uintptr, text string, id uintptr, x, y, width, height int32) uintptr {
 	return createControl("BUTTON", text, bsAutoCheckBox|wsChild|wsVisible|wsTabStop, 0, x, y, width, height, parent, id)
+}
+
+func createListBox(parent, id uintptr, x, y, width, height int32) uintptr {
+	return createControl("LISTBOX", "", lbsNotify|wsBorder|wsChild|wsVisible|wsTabStop|wsVScroll, 0, x, y, width, height, parent, id)
 }
 
 func createComboBox(parent, id uintptr, x, y, width, height int32) uintptr {
@@ -111,6 +117,16 @@ func highWord(value uint32) uint32 {
 func sendMessage(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 	r1, _, _ := procSendMessageW.Call(hwnd, uintptr(message), wParam, lParam)
 	return r1
+}
+
+func redrawWindow(hwnd uintptr, flags uint32) {
+	procRedrawWindow.Call(hwnd, 0, 0, uintptr(flags))
+}
+
+func getComboBoxInfo(hwnd uintptr) (comboBoxInfo, bool) {
+	info := comboBoxInfo{CbSize: uint32(unsafe.Sizeof(comboBoxInfo{}))}
+	r1, _, _ := procGetComboBoxInfo.Call(hwnd, uintptr(unsafe.Pointer(&info)))
+	return info, r1 != 0
 }
 
 func toUTF16Ptr(value string) *uint16 {

@@ -34,6 +34,7 @@ const (
 	wmContextMenu          = 0x007B
 	wsOverlapped           = 0x00000000
 	wsCaption              = 0x00C00000
+	wsBorder               = 0x00800000
 	wsSysMenu              = 0x00080000
 	wsTabStop              = 0x00010000
 	wsVScroll              = 0x00200000
@@ -42,6 +43,7 @@ const (
 	bsPushButton           = 0x00000000
 	bsAutoCheckBox         = 0x00000003
 	cbsDropdownList        = 0x0003
+	lbsNotify              = 0x0001
 	ssLeft                 = 0x00000000
 	swShow                 = 5
 	cwUseDefault           = 0x80000000
@@ -58,11 +60,21 @@ const (
 	cbGetCurSel            = 0x0147
 	cbAddString            = 0x0143
 	cbSetCurSel            = 0x014E
+	lbAddString            = 0x0180
+	lbSetCurSel            = 0x0186
+	lbGetCurSel            = 0x0188
 	bmGetCheck             = 0x00F0
 	bmSetCheck             = 0x00F1
 	bstUnchecked           = 0x0000
 	bstChecked             = 0x0001
 	cbnSelChange           = 1
+	cbnDropdown            = 7
+	lbnSelChange           = 1
+	lbnDblClk              = 2
+	rdwInvalidate          = 0x0001
+	rdwUpdatenow           = 0x0100
+	rdwFrame               = 0x0400
+	rdwAllChildren         = 0x0080
 	idiApplication         = 32512
 	vkCancel               = 0x03
 	vkBack                 = 0x08
@@ -118,6 +130,10 @@ const (
 	dialogCtrlCheckID      = 2005
 	dialogShiftCheckID     = 2006
 	dialogAltCheckID       = 2007
+	dialogSelectKeyButtonID = 2008
+	dialogKeyPickerListID   = 2009
+	dialogKeyPickerOkID     = 2010
+	dialogKeyPickerCancelID = 2011
 )
 
 const (
@@ -137,6 +153,13 @@ const (
 type point struct {
 	X int32
 	Y int32
+}
+
+type rect struct {
+	Left   int32
+	Top    int32
+	Right  int32
+	Bottom int32
 }
 
 type msg struct {
@@ -162,6 +185,16 @@ type wndClassEx struct {
 	LpszMenuName  *uint16
 	LpszClassName *uint16
 	HIconSm       uintptr
+}
+
+type comboBoxInfo struct {
+	CbSize      uint32
+	RcItem      rect
+	RcButton    rect
+	StateButton uint32
+	HwndCombo   uintptr
+	HwndItem    uintptr
+	HwndList    uintptr
 }
 
 type guid struct {
@@ -201,15 +234,21 @@ type app struct {
 type shortcutDialog struct {
 	hwnd             uintptr
 	currentLabel     uintptr
+	selectedKeyLabel uintptr
 	ctrlCheck        uintptr
 	shiftCheck       uintptr
 	altCheck         uintptr
-	keyCombo         uintptr
 	selectedShortcut uint32
+}
+
+type keyPickerDialog struct {
+	hwnd    uintptr
+	listBox uintptr
 }
 
 var (
 	currentApp          *app
 	currentDialog       *shortcutDialog
+	currentKeyPicker    *keyPickerDialog
 	oscSequenceRunning  int32
 )

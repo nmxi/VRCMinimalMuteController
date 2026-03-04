@@ -75,6 +75,10 @@ func (a *app) run() error {
 }
 
 func (a *app) cleanup() {
+	if currentKeyPicker != nil {
+		procDestroyWindow.Call(currentKeyPicker.hwnd)
+		currentKeyPicker = nil
+	}
 	if currentDialog != nil {
 		procDestroyWindow.Call(currentDialog.hwnd)
 		currentDialog = nil
@@ -245,7 +249,34 @@ func mainWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
 }
 
 func dialogWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr {
-	if currentDialog == nil {
+	if currentKeyPicker != nil && hwnd == currentKeyPicker.hwnd {
+		switch message {
+		case wmCommand:
+			commandID := lowWord(uint32(wParam))
+			notifyCode := highWord(uint32(wParam))
+			if commandID == dialogKeyPickerListID && notifyCode == lbnDblClk {
+				currentKeyPicker.applySelection()
+				return 0
+			}
+
+			switch commandID {
+			case dialogKeyPickerOkID:
+				currentKeyPicker.applySelection()
+				return 0
+			case dialogKeyPickerCancelID:
+				procDestroyWindow.Call(hwnd)
+				return 0
+			}
+		case wmClose:
+			procDestroyWindow.Call(hwnd)
+			return 0
+		case wmDestroy:
+			currentKeyPicker = nil
+			return 0
+		}
+	}
+
+	if currentDialog == nil || hwnd != currentDialog.hwnd {
 		return defWindowProc(hwnd, message, wParam, lParam)
 	}
 
@@ -255,14 +286,12 @@ func dialogWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr
 		return 0
 	case wmCommand:
 		commandID := lowWord(uint32(wParam))
-		notifyCode := highWord(uint32(wParam))
-		if commandID == dialogKeyComboID && notifyCode == cbnSelChange {
-			currentDialog.handleComboSelection()
-			return 0
-		}
 		switch commandID {
 		case dialogCtrlCheckID, dialogShiftCheckID, dialogAltCheckID:
 			currentDialog.handleModifierChange()
+			return 0
+		case dialogSelectKeyButtonID:
+			currentDialog.showKeyPicker()
 			return 0
 		}
 
@@ -281,6 +310,10 @@ func dialogWndProc(hwnd uintptr, message uint32, wParam, lParam uintptr) uintptr
 		procDestroyWindow.Call(hwnd)
 		return 0
 	case wmDestroy:
+		if currentKeyPicker != nil {
+			procDestroyWindow.Call(currentKeyPicker.hwnd)
+			currentKeyPicker = nil
+		}
 		currentDialog = nil
 		return 0
 	}
@@ -328,6 +361,10 @@ func (a *app) toggleStartup() {
 }
 
 func (a *app) requestExit() {
+	if currentKeyPicker != nil {
+		procDestroyWindow.Call(currentKeyPicker.hwnd)
+		currentKeyPicker = nil
+	}
 	if currentDialog != nil {
 		procDestroyWindow.Call(currentDialog.hwnd)
 		currentDialog = nil

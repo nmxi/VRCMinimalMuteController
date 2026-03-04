@@ -85,13 +85,11 @@ func (d *shortcutDialog) buildControls(configured uint32) {
 	d.shiftCheck = createCheckBox(d.hwnd, "Shift", dialogShiftCheckID, 96, 116, 120, 20)
 	d.altCheck = createCheckBox(d.hwnd, "Alt", dialogAltCheckID, 96, 140, 120, 20)
 	createStatic(d.hwnd, "入力キー:", 16, 173, 76, 20)
-	d.keyCombo = createComboBox(d.hwnd, dialogKeyComboID, 96, 170, 228, 320)
-	for _, option := range shortcutKeyOptions {
-		sendMessage(d.keyCombo, cbAddString, 0, uintptr(unsafe.Pointer(toUTF16Ptr(option.label))))
-	}
+	d.selectedKeyLabel = createStatic(d.hwnd, keyNameOrUnset(d.selectedShortcut&0xFFFF), 96, 173, 138, 20)
+	createButton(d.hwnd, "選択...", dialogSelectKeyButtonID, 244, 168, 80, 28)
 
 	d.syncModifierChecks()
-	d.syncKeyCombo()
+	d.syncSelectedKeyLabel()
 
 	createButton(d.hwnd, "登録", dialogSaveButtonID, 16, 204, 90, 28)
 	if configured != 0 {
@@ -111,20 +109,38 @@ func (d *shortcutDialog) handleKey(vk uint32) {
 	d.refreshSelection()
 }
 
-func (d *shortcutDialog) handleComboSelection() {
-	if d.keyCombo == 0 {
+func (d *shortcutDialog) showKeyPicker() {
+	if currentKeyPicker != nil {
+		procShowWindow.Call(currentKeyPicker.hwnd, swShow)
+		procSetForegroundWindow.Call(currentKeyPicker.hwnd)
+		procSetFocus.Call(currentKeyPicker.hwnd)
 		return
 	}
 
-	index := int(sendMessage(d.keyCombo, cbGetCurSel, 0, 0))
-	if index < 0 || index >= len(shortcutKeyOptions) {
+	hwnd, _, err := procCreateWindowExW.Call(
+		0,
+		uintptr(unsafe.Pointer(toUTF16Ptr(dialogClassName))),
+		uintptr(unsafe.Pointer(toUTF16Ptr("入力キー選択"))),
+		wsOverlapped|wsCaption|wsSysMenu|wsVisible,
+		cwUseDefault,
+		cwUseDefault,
+		320,
+		420,
+		0,
+		0,
+		currentApp.hInstance,
+		0,
+	)
+	if hwnd == 0 {
+		showMessageBox(d.hwnd, fmt.Sprintf("キー選択ウィンドウを開けませんでした: %v", err), "ショートカット設定", 0x10)
 		return
 	}
 
-	mods := d.selectedShortcut &^ 0xFFFF
-	d.selectedShortcut = mods | shortcutKeyOptions[index].vk
-	d.refreshSelection()
-	procSetFocus.Call(d.hwnd)
+	currentKeyPicker = &keyPickerDialog{hwnd: hwnd}
+	currentKeyPicker.buildControls(d.selectedShortcut & 0xFFFF)
+	procShowWindow.Call(hwnd, swShow)
+	procUpdateWindow.Call(hwnd)
+	procSetForegroundWindow.Call(hwnd)
 }
 
 func (d *shortcutDialog) handleModifierChange() {
@@ -134,7 +150,7 @@ func (d *shortcutDialog) handleModifierChange() {
 
 func (d *shortcutDialog) refreshSelection() {
 	d.syncModifierChecks()
-	d.syncKeyCombo()
+	d.syncSelectedKeyLabel()
 }
 
 func (d *shortcutDialog) syncModifierChecks() {
@@ -149,17 +165,14 @@ func (d *shortcutDialog) syncModifierChecks() {
 	}
 }
 
-func (d *shortcutDialog) syncKeyCombo() {
-	if d.keyCombo == 0 {
+func (d *shortcutDialog) syncSelectedKeyLabel() {
+	if d.selectedKeyLabel == 0 {
 		return
 	}
-
-	index := shortcutKeyIndex(d.selectedShortcut & 0xFFFF)
-	if index >= 0 {
-		sendMessage(d.keyCombo, cbSetCurSel, uintptr(index), 0)
-		return
-	}
-	sendMessage(d.keyCombo, cbSetCurSel, ^uintptr(0), 0)
+	procSetWindowTextW.Call(
+		d.selectedKeyLabel,
+		uintptr(unsafe.Pointer(toUTF16Ptr(keyNameOrUnset(d.selectedShortcut&0xFFFF)))),
+	)
 }
 
 func (d *shortcutDialog) readModifierMask() uint32 {
@@ -174,6 +187,36 @@ func (d *shortcutDialog) readModifierMask() uint32 {
 		mask |= shortcutAltMask
 	}
 	return mask
+}
+
+func (p *keyPickerDialog) buildControls(selectedKey uint32) {
+	createStatic(p.hwnd, "入力キーを選択してください。", 16, 16, 260, 20)
+	p.listBox = createListBox(p.hwnd, dialogKeyPickerListID, 16, 44, 270, 280)
+	for _, option := range shortcutKeyOptions {
+		sendMessage(p.listBox, lbAddString, 0, uintptr(unsafe.Pointer(toUTF16Ptr(option.label))))
+	}
+	if index := shortcutKeyIndex(selectedKey); index >= 0 {
+		sendMessage(p.listBox, lbSetCurSel, uintptr(index), 0)
+	}
+	createButton(p.hwnd, "選択", dialogKeyPickerOkID, 16, 338, 90, 28)
+	createButton(p.hwnd, "キャンセル", dialogKeyPickerCancelID, 176, 338, 110, 28)
+}
+
+func (p *keyPickerDialog) applySelection() {
+	if p == nil || currentDialog == nil || p.listBox == 0 {
+		return
+	}
+
+	index := int(sendMessage(p.listBox, lbGetCurSel, 0, 0))
+	if index < 0 || index >= len(shortcutKeyOptions) {
+		return
+	}
+
+	mods := currentDialog.selectedShortcut &^ 0xFFFF
+	currentDialog.selectedShortcut = mods | shortcutKeyOptions[index].vk
+	currentDialog.refreshSelection()
+	procSetFocus.Call(currentDialog.hwnd)
+	procDestroyWindow.Call(p.hwnd)
 }
 
 func (d *shortcutDialog) save() {
@@ -445,6 +488,13 @@ func formatShortcut(shortcut uint32) string {
 	}
 
 	return strings.Join(parts, "+")
+}
+
+func keyNameOrUnset(vk uint32) string {
+	if vk == 0 {
+		return "未選択"
+	}
+	return keyName(vk)
 }
 
 func formatModifierParts(shortcut uint32) []string {
