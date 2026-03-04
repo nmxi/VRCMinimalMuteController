@@ -52,9 +52,11 @@ const (
 	mfGrayed               = 0x00000001
 	mfSeparator            = 0x00000800
 	idiApplication         = 32512
+	vkCancel               = 0x03
 	vkShift                = 0x10
 	vkControl              = 0x11
 	vkMenu                 = 0x12
+	vkPause                = 0x13
 	errorAlreadyExists     = 183
 	menuShortcutSettingsID = 1001
 	menuStartupToggleID    = 1002

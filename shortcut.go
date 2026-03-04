@@ -75,6 +75,9 @@ func (d *shortcutDialog) buildControls(configured uint32) {
 
 func (d *shortcutDialog) handleKey(vk uint32) {
 	mods := currentModifierMask()
+	if vk == vkCancel {
+		vk = vkPause
+	}
 	switch vk {
 	case vkControl, vkShift, vkMenu:
 		d.selectedShortcut = mods
@@ -182,6 +185,11 @@ func (a *app) tryRegisterShortcut(shortcut uint32) bool {
 	keyCode := shortcut & 0xFFFF
 	if keyCode == 0 {
 		return false
+	}
+
+	if keyCode == vkPause {
+		a.hotKeyRegistered = false
+		return true
 	}
 
 	modifiers := uint32(0)

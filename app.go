@@ -72,10 +72,12 @@ func (a *app) run() error {
 	}
 
 	a.loadConfiguredShortcut()
+	_ = installKeyboardHook()
 	return runMessageLoop()
 }
 
 func (a *app) cleanup() {
+	uninstallKeyboardHook()
 	if currentDialog != nil {
 		procDestroyWindow.Call(currentDialog.hwnd)
 		currentDialog = nil
