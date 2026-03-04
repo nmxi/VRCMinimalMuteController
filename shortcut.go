@@ -212,6 +212,8 @@ func (d *shortcutDialog) remove() {
 		showMessageBox(d.hwnd, "ショートカット設定を削除できませんでした。", "ショートカット設定", 0x10)
 		return
 	}
+	procSetWindowTextW.Call(d.currentLabel, uintptr(unsafe.Pointer(toUTF16Ptr("現在の設定値: 未設定"))))
+	showMessageBox(d.hwnd, "ショートカット設定を削除しました。", "ショートカット設定", 0x40)
 	procDestroyWindow.Call(d.hwnd)
 }
 
