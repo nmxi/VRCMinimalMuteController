@@ -4,7 +4,7 @@ package main
 
 const (
 	appName                = "ミュトコン"
-	appVersion             = "1.0.0"
+	appVersion             = "1.1.0"
 	windowClassName        = "VRCMinimalMuteController.HiddenWindow"
 	dialogClassName        = "VRCMinimalMuteController.ShortcutDialog"
 	singleInstanceMutex    = "VRCMinimalMuteController.SingleInstance"
