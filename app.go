@@ -37,8 +37,7 @@ func newApp() (*app, bool, error) {
 		return nil, false, fmt.Errorf("CreateMutexW failed: %v", err)
 	}
 
-	lastErr, _, _ := procGetLastError.Call()
-	if lastErr == errorAlreadyExists {
+	if errno, ok := err.(syscall.Errno); ok && errno == errorAlreadyExists {
 		syscall.CloseHandle(syscall.Handle(mutexHandle))
 		return nil, true, nil
 	}
