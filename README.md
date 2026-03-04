@@ -4,7 +4,7 @@
 
 Windows の通知領域に常駐し、ダブルクリックまたは登録したショートカットで OSC を送信する最小構成の Go アプリです。
 
-<img width="432" height="241" alt="VRCMinimalMuteController_SetupShortcut" src="https://github.com/user-attachments/assets/b007b35a-3ef1-4143-b29d-13807880d786" />
+<img width="432" height="241" alt="VRCMinimalMuteController_SetupShortcut" src="https://github.com/user-attachments/assets/4e700075-81d0-4c82-9334-34136816e126" />
 
 グローバルショートカットの設定が可能なので、VRChatのウィンドウがアクティブでなくてもマイクミュートの切り替え操作が可能です。
 
